@@ -1,18 +1,56 @@
 from django.views.decorators.csrf import csrf_exempt
 import json
 from django.utils import timezone
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.permissions import AllowAny
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 from django.http import JsonResponse
 from .models import Log
 from datetime import timedelta
 import logging
 from dateutil import parser
+from rest_framework import status
 
 logger = logging.getLogger(__name__)
-@csrf_exempt
-def registrar_log(request):
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Método no permitido'}, status=405)
 
+# Schema definitions for Swagger
+log_request_schema = openapi.Schema(
+    type=openapi.TYPE_OBJECT,
+    properties={
+        'correo': openapi.Schema(type=openapi.TYPE_STRING, description='Correo del usuario'),
+        'fecha': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME, description='Fecha en formato ISO 8601'),
+        'tipo_evento': openapi.Schema(type=openapi.TYPE_STRING, description='Tipo de evento, p.ej. SUCCESS'),
+        'observacion': openapi.Schema(type=openapi.TYPE_STRING, description='Observaciones adicionales', default=''),
+        'nombre_aplicacion': openapi.Schema(type=openapi.TYPE_STRING, description='Nombre de la aplicación que genera el log'),
+        'tipo': openapi.Schema(type=openapi.TYPE_STRING, description='Nivel de log, p.ej. INFO, ERROR'),
+        'id_registro': openapi.Schema(type=openapi.TYPE_STRING, description='ID interno del registro relacionado'),
+    },
+    required=['correo', 'fecha', 'tipo_evento']
+)
+
+# Parámetro manual para GET update_log_date
+param_correo = openapi.Parameter(
+    'correo', openapi.IN_QUERY,
+    description='Correo del usuario a consultar',
+    type=openapi.TYPE_STRING,
+    required=True
+)
+
+@swagger_auto_schema(
+    method='post',
+    request_body=log_request_schema,
+    responses={
+        201: openapi.Response('Log registrado correctamente'),
+        400: openapi.Response('Error en los datos')
+    }
+)
+@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def registrar_log(request):
+    """Registra un nuevo log de evento."""
     data = json.loads(request.body)
     correo = data.get('correo')
     fecha_str = data.get('fecha')
@@ -22,42 +60,45 @@ def registrar_log(request):
     tipo = data.get('tipo')
     id_registro = data.get('id_registro')
 
+    if not correo or not fecha_str or not tipo_evento:
+        return JsonResponse({'error': 'Campos obligatorios faltantes'}, status=status.HTTP_400_BAD_REQUEST)
+
     try:
         fecha = parser.isoparse(fecha_str)
-        #
-        # Convertir la fecha a la zona horaria de Colombia
-        
-        #colombia_tz = pytz.timezone('America/Bogota')
-        #if is_naive(fecha):
-        #    fecha = make_aware(fecha, timezone=colombia_tz)
-        #else:
-        #    fecha = fecha.astimezone(colombia_tz)
     except Exception as e:
         logger.error(f"Error al parsear la fecha: {e}")
-        return JsonResponse({'error': 'Fecha inválida'}, status=400)
+        return JsonResponse({'error': 'Fecha inválida'}, status=status.HTTP_400_BAD_REQUEST)
 
-    log = Log.objects.create(correo=correo, fecha=fecha, tipo_evento=tipo_evento, observacion=observacion, nombre_aplicacion=nombre_aplicacion, tipo=tipo, id_registro=id_registro)
-    return JsonResponse({'message': 'Log registrado correctamente'}, status=201)
+    Log.objects.create(
+        correo=correo,
+        fecha=fecha,
+        tipo_evento=tipo_evento,
+        observacion=observacion,
+        nombre_aplicacion=nombre_aplicacion,
+        tipo=tipo,
+        id_registro=id_registro
+    )
+    return JsonResponse({'message': 'Log registrado correctamente'}, status=status.HTTP_201_CREATED)
 
-
-
+@swagger_auto_schema(
+    method='get',
+    manual_parameters=[param_correo],
+    responses={200: openapi.Response('Fecha calculada'),
+               400: openapi.Response('Parámetros inválidos')}
+)
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def update_log_date(request):
-    logger.debug("Request received for update_log_date")
+    """Calcula la próxima fecha de log esperada y si requiere justificación."""
+    correo = request.GET.get('correo')
+    if not correo:
+        return JsonResponse({'error': 'Parametro correo es obligatorio'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if not (correo := request.GET.get('correo')):
-        logger.error("Correo is required")
-        return JsonResponse({'error': 'Correo is required'}, status=400)
-
-    logger.debug(f"Correo received: {correo}")
-
-    now = timezone.now()  # Fecha y hora actual con zona horaria
+    now = timezone.now()
     today = now.date()
 
-    logger.debug(f"Searching for logs with correo: {correo}")
-
-    # Obtener el último log registrado por el usuario
     last_log = Log.objects.filter(correo=correo, tipo_evento='SUCCESS').order_by('-fecha').first()
-
     if not last_log:
         logger.debug("No logs found for the given correo, assigning today's date.")
         return JsonResponse({
@@ -69,22 +110,17 @@ def update_log_date(request):
     last_reported_date = last_log.fecha.date()
     logger.debug(f"Last reported date: {last_reported_date}")
 
-    # Determinar la próxima fecha pendiente
     expected_next_date = last_reported_date + timedelta(days=1)
     logger.debug(f"Expected next reporting date: {expected_next_date}")
 
-    # Calcular el mediodía del día siguiente después del último reporte
-    justification_deadline = last_reported_date + timedelta(days=2)  # Día siguiente + 12 horas
     justification_deadline = timezone.make_aware(
-        timezone.datetime.combine(justification_deadline, timezone.datetime.min.time()) + timedelta(hours=12),
+        timezone.datetime.combine(last_reported_date + timedelta(days=2), timezone.datetime.min.time()) + timedelta(hours=12),
         timezone.get_current_timezone()
     )
 
-    # Asegurar que `now` sea `aware`
     if timezone.is_naive(now):
         now = timezone.make_aware(now, timezone.get_current_timezone())
 
-    # Determinar si se requiere justificación
     requires_justification = now >= justification_deadline
     logger.debug(f"Justification deadline: {justification_deadline}, Requires justification: {requires_justification}")
 
@@ -102,5 +138,3 @@ def update_log_date(request):
             'new_date': expected_next_date.strftime('%Y-%m-%d'),
             'requires_justification': requires_justification
         })
-    
-# Create your views here.

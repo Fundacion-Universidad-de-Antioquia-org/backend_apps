@@ -1,17 +1,58 @@
-from django.shortcuts import render
-
-# Create your views here.
-from django.http import JsonResponse
-from .utils import odoo_search_read, odoo_update
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.permissions import AllowAny
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 from django.views.decorators.csrf import csrf_exempt
-import json
-import logging
+from django.http import JsonResponse
+import json, logging
+from .utils import odoo_search_read, odoo_update
 from collections import defaultdict
+from django.utils import timezone
+from datetime import timedelta
 
 # Vista para traer empleados y actualizar datos
 # 1) Obtenemos un logger para este módulo
 logger = logging.getLogger(__name__)  # __name__ debe coincidir con 'tu_app.views'
+param_compania = openapi.Parameter(
+    'compania', openapi.IN_QUERY,
+    description='ID o nombre de la compañía',
+    type=openapi.TYPE_STRING,
+    required=False
+)
+param_estado = openapi.Parameter(
+    'estado', openapi.IN_QUERY,
+    description='Estado del empleado',
+    type=openapi.TYPE_STRING,
+    required=False
+)
+param_prestador_id = openapi.Parameter(
+    'prestador_id', openapi.IN_QUERY,
+    description='ID del prestador de servicio',
+    type=openapi.TYPE_INTEGER,
+    required=False
+)
+param_codigo = openapi.Parameter(
+    'codigo', openapi.IN_QUERY,
+    description='Código de tripulante',
+    type=openapi.TYPE_STRING,
+    required=True
+)
+param_cedula = openapi.Parameter(
+    'cedula', openapi.IN_QUERY,
+    description='Cédula de empleado',
+    type=openapi.TYPE_STRING,
+    required=False
+)
+
+@swagger_auto_schema(
+    method='get',
+    manual_parameters=[param_compania, param_estado],
+    responses={200: openapi.Response('Listado de empleados')}
+)
 @csrf_exempt
+@api_view(['GET'])
+@authentication_classes([])       # desactiva TokenAuth/SessionAuth
+@permission_classes([AllowAny])   # acceso público
 def empleados_list(request):
     # 1) Solo GET
     if request.method != 'GET':
@@ -54,7 +95,15 @@ def empleados_list(request):
     logger.debug(f"[empleados_list] Odoo devolvió {len(empleados)} empleados")
 
     return JsonResponse({'empleados': empleados})
+@swagger_auto_schema(
+    method='get',
+    manual_parameters=[param_compania, param_estado,param_prestador_id],
+    responses={200: openapi.Response('Listado de empleados')}
+)
 @csrf_exempt
+@api_view(['GET'])
+@authentication_classes([])       # desactiva TokenAuth/SessionAuth
+@permission_classes([AllowAny])   # acceso público
 def prestadores_list(request):
     domain = []  # ya no metemos supplier_rank ni is_company
 
@@ -91,7 +140,15 @@ def prestadores_list(request):
         limit=False  
     )
     return JsonResponse({'prestadores': prestadores})
+@swagger_auto_schema(
+    method='get',
+    manual_parameters=[],
+    responses={200: openapi.Response('Listado de empleados')}
+)
 @csrf_exempt
+@api_view(['GET'])
+@authentication_classes([])       # desactiva TokenAuth/SessionAuth
+@permission_classes([AllowAny])   # acceso público
 def empleados_conduccion_list(request):
     if request.method != 'GET':
         return JsonResponse({'error': 'Sólo GET permitido.'}, status=405)
@@ -135,7 +192,15 @@ def empleados_conduccion_list(request):
         for emp in empleados
     ]
     return JsonResponse({'empleados': resultados})
+@swagger_auto_schema(
+    method='get',
+    manual_parameters=[param_codigo],
+    responses={200: openapi.Response('Listado de empleados')}
+)
 @csrf_exempt
+@api_view(['GET'])
+@authentication_classes([])       # desactiva TokenAuth/SessionAuth
+@permission_classes([AllowAny])   # acceso público
 def empleado_conduccion_por_codigo(request):
     # 1) Sólo GET
     if request.method != 'GET':
@@ -267,7 +332,15 @@ def contratos_list(request):
 """
 
 
+@swagger_auto_schema(
+    method='get',
+    manual_parameters=[param_compania, param_estado],
+    responses={200: openapi.Response('Listado de empleados')}
+)
 @csrf_exempt
+@api_view(['GET'])
+@authentication_classes([])       # desactiva TokenAuth/SessionAuth
+@permission_classes([AllowAny])   # acceso público
 def contratos_list(request):
     # 1) Sólo GET
     if request.method != 'GET':
@@ -355,6 +428,15 @@ def contratos_list(request):
         return JsonResponse({'error': str(exc)}, status=500)
 
     return JsonResponse({'contratos': contratos})
+@swagger_auto_schema(
+    method='get',
+    manual_parameters=[param_compania, param_estado],
+    responses={200: openapi.Response('Listado de empleados')}
+)
+@csrf_exempt
+@api_view(['GET'])
+@authentication_classes([])       # desactiva TokenAuth/SessionAuth
+@permission_classes([AllowAny])   # acceso público
 def estados_basicos_list(request):
     estados = odoo_search_read(
         model='x_contratos_empleados',
@@ -364,7 +446,15 @@ def estados_basicos_list(request):
 
 # Vista para traer salarios
 
+@swagger_auto_schema(
+    method='get',
+    manual_parameters=[],
+    responses={200: openapi.Response('Listado de empleados')}
+)
 @csrf_exempt
+@api_view(['GET'])
+@authentication_classes([])       # desactiva TokenAuth/SessionAuth
+@permission_classes([AllowAny])   # acceso público
 def empleados_y_sus_hijos_activos(request):
     if request.method != 'GET':
         return JsonResponse({'error': 'Sólo GET permitido.'}, status=405)
