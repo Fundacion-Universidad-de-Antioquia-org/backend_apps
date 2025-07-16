@@ -104,6 +104,8 @@ SWAGGER_SETTINGS = {
             'description': 'Token de autorización en formato: Bearer <tu_token>',
         },
     },
+    'DEFAULT_API_URL': 'https://app-backendapps-prod-001-c6cjd9a8f4fggma7.eastus-01.azurewebsites.net',
+
     'USE_SESSION_AUTH': False,
     'PERSIST_AUTH': True,
     'VALIDATOR_URL': None,

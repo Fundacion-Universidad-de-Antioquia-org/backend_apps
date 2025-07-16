@@ -16,6 +16,8 @@ schema_view = get_schema_view(
     ),
     public=True,
     permission_classes=(permissions.AllowAny,),
+    url='https://app-backendapps-prod-001-c6cjd9a8f4fggma7.eastus-01.azurewebsites.net',  # ← aquí
+
 )
 urlpatterns = [
     path('admin/', admin.site.urls),
