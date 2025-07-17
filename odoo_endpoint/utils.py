@@ -2,7 +2,10 @@ import xmlrpc.client
 from django.conf import settings
 import os
 from dotenv import load_dotenv
-
+from rest_framework.views import exception_handler
+from rest_framework.exceptions import NotAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
 
 load_dotenv()
 ODOO_URL = os.getenv("HOST")
@@ -47,3 +50,19 @@ def odoo_update(model, ids, values):
         model, 'write',
         [ids, values]
     )
+
+def custom_exception_handler(exc, context):
+    # 1) Si es falta de credenciales, lo devolvemos directamente y NO llamamos al exception_handler original
+    if isinstance(exc, NotAuthenticated):
+        return Response(
+            {'detail': 'Token JWT faltante o inválido'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+    # 2) Para cualquier otra excepción, lo delegamos (envuelve en try para no romper si hay otros errores)
+    try:
+        return exception_handler(exc, context)
+    except Exception:
+        return Response(
+            {'detail': 'Error interno al procesar la petición.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

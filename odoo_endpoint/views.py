@@ -6,12 +6,23 @@ from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 import json, logging
 from .utils import odoo_search_read, odoo_update
-from collections import defaultdict
-from django.utils import timezone
-from datetime import timedelta
-
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.permissions import IsAuthenticated
 # Vista para traer empleados y actualizar datos
 # 1) Obtenemos un logger para este módulo
+from django.contrib.auth.forms import PasswordResetForm
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
+from rest_framework import generics, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from .serializers import (
+    RegisterSerializer,
+    PasswordResetRequestSerializer,
+    PasswordResetConfirmSerializer
+)
 logger = logging.getLogger(__name__)  # __name__ debe coincidir con 'tu_app.views'
 param_compania = openapi.Parameter(
     'compania', openapi.IN_QUERY,
@@ -44,15 +55,31 @@ param_cedula = openapi.Parameter(
     required=False
 )
 
+@csrf_exempt  # opcional si usas solo JWT en cabecera
 @swagger_auto_schema(
     method='get',
+    operation_description="Devuelve la lista de empleados, filtrable por compañía y estado",
     manual_parameters=[param_compania, param_estado],
-    responses={200: openapi.Response('Listado de empleados')}
+    responses={
+        200: openapi.Response(
+            description='Listado de empleados',
+            schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'empleados': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Items(type=openapi.TYPE_OBJECT)
+                    )
+                }
+            )
+        ),
+        401: openapi.Response('No autorizado'),
+        405: openapi.Response('Método no permitido'),
+    }
 )
-@csrf_exempt
 @api_view(['GET'])
-@authentication_classes([])       # desactiva TokenAuth/SessionAuth
-@permission_classes([AllowAny])   # acceso público
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
 def empleados_list(request):
     # 1) Solo GET
     if request.method != 'GET':
@@ -98,12 +125,27 @@ def empleados_list(request):
 @swagger_auto_schema(
     method='get',
     manual_parameters=[param_compania, param_estado,param_prestador_id],
-    responses={200: openapi.Response('Listado de empleados')}
+    responses={
+        200: openapi.Response(
+            description='Listado de prestadores',
+            schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'empleados': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Items(type=openapi.TYPE_OBJECT)
+                    )
+                }
+            )
+        ),
+        401: openapi.Response('No autorizado'),
+        405: openapi.Response('Método no permitido'),
+    }
 )
 @csrf_exempt
 @api_view(['GET'])
-@authentication_classes([])       # desactiva TokenAuth/SessionAuth
-@permission_classes([AllowAny])   # acceso público
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
 def prestadores_list(request):
     domain = []  # ya no metemos supplier_rank ni is_company
 
@@ -143,12 +185,27 @@ def prestadores_list(request):
 @swagger_auto_schema(
     method='get',
     manual_parameters=[],
-    responses={200: openapi.Response('Listado de empleados')}
+    responses={
+        200: openapi.Response(
+            description='Listado de empleados del programa de conducción',
+            schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'empleados': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Items(type=openapi.TYPE_OBJECT)
+                    )
+                }
+            )
+        ),
+        401: openapi.Response('No autorizado'),
+        405: openapi.Response('Método no permitido'),
+    }
 )
 @csrf_exempt
 @api_view(['GET'])
-@authentication_classes([])       # desactiva TokenAuth/SessionAuth
-@permission_classes([AllowAny])   # acceso público
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
 def empleados_conduccion_list(request):
     if request.method != 'GET':
         return JsonResponse({'error': 'Sólo GET permitido.'}, status=405)
@@ -195,12 +252,27 @@ def empleados_conduccion_list(request):
 @swagger_auto_schema(
     method='get',
     manual_parameters=[param_codigo],
-    responses={200: openapi.Response('Listado de empleados')}
+    responses={
+        200: openapi.Response(
+            description='Empleados del programa de conducción filtrados por código',
+            schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'empleados': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Items(type=openapi.TYPE_OBJECT)
+                    )
+                }
+            )
+        ),
+        401: openapi.Response('No autorizado'),
+        405: openapi.Response('Método no permitido'),
+    }
 )
 @csrf_exempt
 @api_view(['GET'])
-@authentication_classes([])       # desactiva TokenAuth/SessionAuth
-@permission_classes([AllowAny])   # acceso público
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
 def empleado_conduccion_por_codigo(request):
     # 1) Sólo GET
     if request.method != 'GET':
@@ -258,89 +330,31 @@ def empleado_conduccion_por_codigo(request):
 
     # 6) Devolver JSON
     return JsonResponse({'empleados': resultados})
-"""@csrf_exempt
-def contratos_list(request):
-    # 1) Sólo GET
-    if request.method != 'GET':
-        return JsonResponse({'error': 'Sólo GET permitido.'}, status=405)
-
-    # 2) Leer parámetros
-    cedula    = request.GET.get('cedula')    # la cédula a buscar
-    estado_in = request.GET.get('estado')    # “Activo” o “Retirado”
-
-    # 3) Construir domain
-    domain = []
-    if cedula:
-        # filtramos por el campo related.identification_id directamente
-        domain.append([
-            'x_studio_many2one_field_4arFu.name',
-            '=',
-            cedula
-        ])
-    if estado_in:
-        e = estado_in.strip().capitalize()
-        if e not in ('Activo', 'Retirado'):
-            return JsonResponse(
-                {'error': 'Parámetro estado inválido; use "Activo" o "Retirado".'},
-                status=400
-            )
-        domain.append(['x_studio_estado_contrato', '=', e])
-
-    # 4) Definir campos según el estado
-    fields_activo = [
-        'x_name',
-        'x_studio_tipo_contrato',
-        'x_studio_fecha_inicio_contrato',
-        'x_studio_fecha_fin_contrato',
-        'x_studio_estado_contrato',
-        'x_studio_salario_contrato',
-        'x_studio_nmero_contrato',
-        'x_studio_nombre_empleado',
-        'x_studio_many2one_field_jcBPU',
-    ]
-    fields_retirado = [
-        'x_name',
-        'x_studio_tipo_contrato',
-        'x_studio_fecha_inicio_contrato',
-        'x_studio_fecha_vencimiento_contrato',
-        'x_studio_estado_contrato',
-        'x_studio_many2one_field_kEZoK',
-        'x_studio_salario_contrato',
-        'x_studio_nmero_contrato',
-        'x_studio_nombre_empleado',
-        'x_studio_many2one_field_jcBPU',
-    ]
-
-    if estado_in:
-        # si piden activo/retirado, devolvemos sólo el set correspondiente
-        fields = fields_activo if e == 'Activo' else fields_retirado
-    else:
-        # si no piden estado, devolvemos todos los campos (unión)
-        fields = list({*fields_activo, *fields_retirado})
-
-    # 5) Llamada a Odoo
-    try:
-        contratos = odoo_search_read(
-            model='x_contratos_empleados',
-            domain=domain or None,
-            fields=fields
-        )
-    except Exception as exc:
-        return JsonResponse({'error': str(exc)}, status=500)
-
-    return JsonResponse({'contratos': contratos})
-"""
 
 
 @swagger_auto_schema(
     method='get',
     manual_parameters=[param_compania, param_estado],
-    responses={200: openapi.Response('Listado de empleados')}
-)
+    responses={
+        200: openapi.Response(
+            description='Contratos de empleados',
+            schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'empleados': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Items(type=openapi.TYPE_OBJECT)
+                    )
+                }
+            )
+        ),
+        401: openapi.Response('No autorizado'),
+        405: openapi.Response('Método no permitido'),
+    })
 @csrf_exempt
 @api_view(['GET'])
-@authentication_classes([])       # desactiva TokenAuth/SessionAuth
-@permission_classes([AllowAny])   # acceso público
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
 def contratos_list(request):
     # 1) Sólo GET
     if request.method != 'GET':
@@ -435,8 +449,8 @@ def contratos_list(request):
 )
 @csrf_exempt
 @api_view(['GET'])
-@authentication_classes([])       # desactiva TokenAuth/SessionAuth
-@permission_classes([AllowAny])   # acceso público
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
 def estados_basicos_list(request):
     estados = odoo_search_read(
         model='x_contratos_empleados',
@@ -449,12 +463,26 @@ def estados_basicos_list(request):
 @swagger_auto_schema(
     method='get',
     manual_parameters=[],
-    responses={200: openapi.Response('Listado de empleados')}
-)
+    responses={
+        200: openapi.Response(
+            description='Empleados y sus hijos activos',
+            schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'empleados': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Items(type=openapi.TYPE_OBJECT)
+                    )
+                }
+            )
+        ),
+        401: openapi.Response('No autorizado'),
+        405: openapi.Response('Método no permitido'),
+    })
 @csrf_exempt
 @api_view(['GET'])
-@authentication_classes([])       # desactiva TokenAuth/SessionAuth
-@permission_classes([AllowAny])   # acceso público
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
 def empleados_y_sus_hijos_activos(request):
     if request.method != 'GET':
         return JsonResponse({'error': 'Sólo GET permitido.'}, status=405)
@@ -497,24 +525,80 @@ def empleados_y_sus_hijos_activos(request):
         })
 
     return JsonResponse({'empleados': list(agrupado.values())}, safe=False)
-def salarios_list(request):
-    salarios = odoo_search_read(
-        model='hr.contract',
-        fields=['id', 'employee_id', 'wage']
-    )
-    return JsonResponse({'salarios': salarios})
 
-# Vista para traer estudios
-
+@csrf_exempt
+@swagger_auto_schema(
+    method='get',
+    operation_description="Devuelve lista de estudios filtrable por compañía y estado",
+    manual_parameters=[param_compania, param_estado],
+    responses={
+        200: openapi.Response(
+            description='Estudios de empleados',
+            schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'estudios': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Items(type=openapi.TYPE_OBJECT)
+                    )
+                }
+            )
+        ),
+        401: openapi.Response('No autorizado'),
+        405: openapi.Response('Método no permitido'),
+    }
+)
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
 def estudios_list(request):
+    # 1) Sólo GET
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Sólo GET permitido.'}, status=405)
+
+    # 2) Leer filtros
+    compania = request.GET.get('compania')
+    estado   = request.GET.get('estado')
+    logger.debug(f"[estudios_list] Filtros recibidos – compania={compania!r}, estado={estado!r}")
+
+    # 3) Construir domain Odoo
+    domain = []
+    if compania:
+        # la relación many2one a empleado se llama x_studio_many2one_field_bEe70
+        # y la compañía está en hr.employee.company_id
+        try:
+            # filtro por ID de compañía
+            domain.append(('x_studio_many2one_field_bEe70.company_id', '=', int(compania)))
+        except ValueError:
+            # filtro por nombre parcial de compañía
+            domain.append(('x_studio_many2one_field_bEe70.company_id.name', 'ilike', compania))
+    if estado:
+        domain.append(('x_studio_estado', '=', estado))
+
+    logger.debug(f"[estudios_list] Dominio final: {domain!r}")
+
+    # 4) Llamada a Odoo
     estudios = odoo_search_read(
-        model='hr.education',
-        fields=['id', 'employee_id', 'name', 'date_start', 'date_end', 'level']
+        model='x_historial',
+        domain=domain or None,
+        fields=[
+            'id',
+            'x_studio_many2one_field_bEe70',
+            'x_name',
+            'x_studio_nombre_empleado',
+            'x_studio_institucin',
+            'x_studio_formacin_acadmica',
+            'x_studio_nivel_de_estudio',
+            'x_studio_estado',
+            'x_studio_semestre_nivel',
+            'x_studio_ao_de_graduacin',
+            'x_studio_description',
+        ],
+        limit=False
     )
-    return JsonResponse({'estudios': estudios})
+    logger.debug(f"[estudios_list] Odoo devolvió {len(estudios)} estudios")
 
-# Vista para actualizar datos de empleado
-
+    return JsonResponse({'estudios': estudios}, status=200)
 @csrf_exempt
 def actualizar_empleado(request):
     if request.method == 'POST':
@@ -524,3 +608,75 @@ def actualizar_empleado(request):
         resultado = odoo_update('hr.employee', [empleado_id], valores)
         return JsonResponse({'resultado': resultado})
     return JsonResponse({'error': 'Método no permitido'}, status=405)
+
+
+
+class RegisterView(generics.CreateAPIView):
+    """
+    POST /auth/register/
+    {
+      "username": "...",
+      "email": "...",
+      "password": "...",
+      "password2": "..."
+    }
+    """
+    serializer_class   = RegisterSerializer
+    permission_classes = [AllowAny]
+
+
+class PasswordResetRequestView(APIView):
+    """
+    POST /auth/password-reset/
+    { "email": "usuario@ejemplo.com" }
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+
+        form = PasswordResetForm({'email': email})
+        if form.is_valid():
+            form.save(
+                request=request,
+                use_https=request.is_secure(),
+                from_email=None,
+                email_template_name='registration/password_reset_email.html',
+                subject_template_name='registration/password_reset_subject.txt',
+            )
+        return Response({'detail': 'Mensaje enviado si el email está registrado.'})
+
+
+class PasswordResetConfirmView(APIView):
+    """
+    POST /auth/password-reset-confirm/
+    {
+      "uid": "...",
+      "token": "...",
+      "new_password": "NuevaClave123"
+    }
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        uidb64       = serializer.validated_data['uid']
+        token        = serializer.validated_data['token']
+        new_password = serializer.validated_data['new_password']
+
+        try:
+            uid  = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, User.DoesNotExist):
+            return Response({'error': 'Usuario inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not default_token_generator.check_token(user, token):
+            return Response({'error': 'Token inválido o expirado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.save()
+        return Response({'detail': 'Contraseña restablecida correctamente.'})

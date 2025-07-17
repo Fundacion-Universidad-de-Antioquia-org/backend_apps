@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+from datetime import timedelta
 
 # Cargar las variables de entode el archivo .env
 load_dotenv()
@@ -30,7 +31,14 @@ SECRET_KEY = 'django-insecure-3g$%uhgof45q+w34)g8nz)16y^20@mqex)6guk#$%tfszpi4+!
 DEBUG = True
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
-
+#servidor correo
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'noreply@fundacionudea.co'
+EMAIL_HOST_PASSWORD = 'gvav hsvg awdm hrfw'
+DEFAULT_FROM_EMAIL = 'noreply@fundacionudea.co'
 
 
 # Application definition
@@ -84,13 +92,17 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+
         # Ajusta según tus necesidades
         'rest_framework.authentication.TokenAuthentication',
         # 'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated',
     ],
+    # (opcional) para personalizar el mensaje de error:
+    'EXCEPTION_HANDLER': 'odoo_endpoint.utils.custom_exception_handler',
     # Opcional: formatea fechas con offset
     'DATETIME_FORMAT': "%Y-%m-%dT%H:%M:%S%z",
 }
@@ -116,6 +128,24 @@ SWAGGER_SETTINGS = {
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+SIMPLE_JWT = {
+    # Access tokens válidos por 1 hora
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+
+    # Refresh tokens válidos por 1 día (puedes ajustarlo a tu gusto)
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+
+    # Opciones adicionales útiles:
+    # Si quieres quitar la rotación (la nueva exp a cada refresh), déjalo en False:
+    'ROTATE_REFRESH_TOKENS': False,
+    # Si quieres invalidar el refresh token tras usarlo:
+    'BLACKLIST_AFTER_ROTATION': False,
+
+    # Algoritmo de firma y clave (usa tu SECRET_KEY):
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    # ...
+}
 
 
 DATABASES = {
