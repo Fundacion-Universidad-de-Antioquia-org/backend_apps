@@ -599,16 +599,6 @@ def estudios_list(request):
     logger.debug(f"[estudios_list] Odoo devolvió {len(estudios)} estudios")
 
     return JsonResponse({'estudios': estudios}, status=200)
-@csrf_exempt
-def actualizar_empleado(request):
-    if request.method == 'POST':
-        data = json.loads(request.body)
-        empleado_id = data.get('id')
-        valores = data.get('valores', {})
-        resultado = odoo_update('hr.employee', [empleado_id], valores)
-        return JsonResponse({'resultado': resultado})
-    return JsonResponse({'error': 'Método no permitido'}, status=405)
-
 
 
 class RegisterView(generics.CreateAPIView):
