@@ -212,7 +212,7 @@ def empleados_conduccion_list(request):
 
     # dominio fijo para la compañía
     domain = [
-        ('company_id.name', '=', 'Programa de Conducción de Vehículos de Transporte Masivo'),  ('x_studio_estado_empleado', '=', 'Activo'),
+        ('company_id.name', '=', 'Programa de Conducción de Vehículos de Transporte Masivo'),
     ]
 
     # llamamos a Odoo sin límite de 100
@@ -236,18 +236,27 @@ def empleados_conduccion_list(request):
     total = len(empleados)
     logger.debug(f"[empleados_conduccion_list] Odoo devolvió {total} empleados")
 
-    resultados = [
-        {
-            'cedula':   emp.get('name'),
-            'nombre':   emp.get('identification_id'),
-            'Codigo tripulante': emp.get('x_studio_codigo'),
-            'estado':   emp.get('x_studio_estado_empleado'),
-            'job_title': emp.get('job_title'),
-            'zona': emp.get('x_studio_zona_proyecto_metro'),
-            'formacion_conduccion': emp.get('x_studio_formacion_conduccion'),
-        }
-        for emp in empleados
-    ]
+    # Mapeo de nombres de clave JSON a campos de Odoo
+    field_map = {
+        'cedula': 'name',
+        'nombre': 'identification_id',
+        'Codigo tripulante': 'x_studio_codigo',
+        'estado': 'x_studio_estado_empleado',
+        'job_title': 'job_title',
+        'zona': 'x_studio_zona_proyecto_metro',
+        'formacion_conduccion': 'x_studio_formacion_conduccion',
+    }
+
+    resultados = []
+    for emp in empleados:
+        emp_data = {}
+        for json_key, odoo_field in field_map.items():
+            valor = emp.get(odoo_field)
+            # Sólo añadimos la clave si valor no es None, False ni cadena vacía
+            if valor not in (None, False, ''):
+                emp_data[json_key] = valor
+        resultados.append(emp_data)
+
     return JsonResponse({'empleados': resultados})
 @swagger_auto_schema(
     method='get',
@@ -313,20 +322,25 @@ def empleado_conduccion_por_codigo(request):
     total = len(empleados)
     logger.debug(f"[empleado_conduccion_por_codigo] Odoo devolvió {total} registros")
 
-    # 5) Mapear al JSON de respuesta
-    resultados = [
-        {
-            'cedula':              emp.get('name'),
-            'nombre':              emp.get('identification_id'),
-            'Codigo tripulante':   emp.get('x_studio_codigo'),
-            'estado':              emp.get('x_studio_estado_empleado'),
-            'job_title':           emp.get('job_title'),
-            'zona': emp.get('x_studio_zona_proyecto_metro'),
-            'formacion_conduccion': emp.get('x_studio_formacion_conduccion'),
+    field_map = {
+        'cedula':              'name',
+        'nombre':              'identification_id',
+        'Codigo tripulante':   'x_studio_codigo',
+        'estado':              'x_studio_estado_empleado',
+        'job_title':           'job_title',
+        'zona':                'x_studio_zona_proyecto_metro',
+        'formacion_conduccion':'x_studio_formacion_conduccion',
+    }
 
-        }
-        for emp in empleados
-    ]
+    resultados = []
+    for emp in empleados:
+        emp_data = {}
+        for json_key, odoo_field in field_map.items():
+            valor = emp.get(odoo_field)
+            # Sólo incluimos si tiene valor significativo
+            if valor not in (None, False, ''):
+                emp_data[json_key] = valor
+        resultados.append(emp_data)
 
     # 6) Devolver JSON
     return JsonResponse({'empleados': resultados})
