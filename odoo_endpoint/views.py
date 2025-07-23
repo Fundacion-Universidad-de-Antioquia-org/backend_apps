@@ -226,7 +226,8 @@ def empleados_conduccion_list(request):
             'x_studio_estado_empleado',    # estado
             'job_title',
             'x_studio_zona_proyecto_metro',# título del puesto
-            'x_studio_formacion_conduccion'
+            'x_studio_formacion_conduccion',
+            'x_studio_correo_electrnico_personal'
         ],
         # prueba primero con False; si falla, cámbialo a 0
         limit=False  
@@ -245,6 +246,7 @@ def empleados_conduccion_list(request):
         'job_title': 'job_title',
         'zona': 'x_studio_zona_proyecto_metro',
         'formacion_conduccion': 'x_studio_formacion_conduccion',
+        'Correo personal': 'x_studio_correo_electrnico_personal'
     }
 
     resultados = []
@@ -315,7 +317,8 @@ def empleado_conduccion_por_codigo(request):
             'x_studio_estado_empleado',    # estado
             'job_title',
             'x_studio_zona_proyecto_metro',# título del puesto
-            'x_studio_formacion_conduccion'# título del puesto
+            'x_studio_formacion_conduccion',# título del puesto
+            'x_studio_correo_electrnico_personal'
         ],
         limit=False  # o limit=0 si tu wrapper lo prefiere
     )
@@ -330,6 +333,7 @@ def empleado_conduccion_por_codigo(request):
         'job_title':           'job_title',
         'zona':                'x_studio_zona_proyecto_metro',
         'formacion_conduccion':'x_studio_formacion_conduccion',
+        'Correo personal':     'x_studio_correo_electrnico_personal'
     }
 
     resultados = []
