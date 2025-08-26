@@ -54,6 +54,54 @@ param_cedula = openapi.Parameter(
     type=openapi.TYPE_STRING,
     required=False
 )
+# --- Helpers para resolver many2one de municipio vía x_bancos ---
+
+def _extract_m2o_id(val):
+    """
+    Extrae el ID de un many2one desde distintos formatos:
+    - [id, name] -> id
+    - {'id': X, ...} -> id
+    - int -> id
+    - cualquier otro -> None
+    """
+    if val is None or val is False:
+        return None
+    if isinstance(val, int):
+        return val
+    if isinstance(val, (list, tuple)) and len(val) >= 1 and isinstance(val[0], int):
+        return val[0]
+    if isinstance(val, dict) and 'id' in val and isinstance(val['id'], int):
+        return val['id']
+    return None
+
+def _fetch_x_bancos_names(ids_set):
+    """
+    Dado un conjunto de IDs de x_bancos, retorna {id: x_name|name|display_name}.
+    Si no existe x_name, intenta 'name' y luego 'display_name'.
+    """
+    if not ids_set:
+        return {}
+
+    try:
+        registros = odoo_search_read(
+            model='x_bancos',
+            domain=[('id', 'in', list(ids_set))],
+            fields=['id', 'x_name', 'name', 'display_name'],
+            limit=0
+        )
+    except Exception as e:
+        logger.exception("[_fetch_x_bancos_names] Error consultando x_bancos")
+        return {}
+
+    id2name = {}
+    for rec in registros or []:
+        rid = rec.get('id')
+        if rid is None:
+            continue
+        nombre = rec.get('x_name') or rec.get('name') or rec.get('display_name')
+        if nombre:
+            id2name[rid] = nombre
+    return id2name
 
 @csrf_exempt  # opcional si usas solo JWT en cabecera
 @swagger_auto_schema(
@@ -210,37 +258,42 @@ def empleados_conduccion_list(request):
     if request.method != 'GET':
         return JsonResponse({'error': 'Sólo GET permitido.'}, status=405)
 
-    # dominio fijo para la compañía
     domain = [
         ('company_id.name', '=', 'Programa de Conducción de Vehículos de Transporte Masivo'),
     ]
 
-    # llamamos a Odoo sin límite de 100
     empleados = odoo_search_read(
         model='hr.employee',
         domain=domain,
         fields=[
-            'name',                        # cédula
-            'identification_id',           # nombre
-            'x_studio_codigo',             # código tripulante
-            'x_studio_estado_empleado',    # estado
+            'name',
+            'identification_id',
+            'x_studio_codigo',
+            'x_studio_estado_empleado',
             'job_title',
-            'x_studio_zona_proyecto_metro',# título del puesto
+            'x_studio_zona_proyecto_metro',
             'x_studio_formacion_conduccion',
             'x_studio_correo_electrnico_personal',
             'address_home_id',
             'x_studio_barrio',
             'x_studio_municipio'
         ],
-        # prueba primero con False; si falla, cámbialo a 0
-        limit=False  
-        # o bien limit=0
+        limit=0  # usa 0 en vez de False
     )
-    # 4) Loguear la cantidad total que vino de Odoo
+
     total = len(empleados)
     logger.debug(f"[empleados_conduccion_list] Odoo devolvió {total} empleados")
 
-    # Mapeo de nombres de clave JSON a campos de Odoo
+    # 1) Colecciona IDs de municipio (many2one a x_bancos)
+    municipio_ids = set()
+    for emp in empleados:
+        mid = _extract_m2o_id(emp.get('x_studio_municipio'))
+        if mid:
+            municipio_ids.add(mid)
+
+    # 2) Resuelve nombres de municipios en lote
+    id2mun = _fetch_x_bancos_names(municipio_ids)
+
     field_map = {
         'cedula': 'name',
         'nombre': 'identification_id',
@@ -250,9 +303,9 @@ def empleados_conduccion_list(request):
         'zona': 'x_studio_zona_proyecto_metro',
         'formacion_conduccion': 'x_studio_formacion_conduccion',
         'Correo personal': 'x_studio_correo_electrnico_personal',
-        'address_home_id': 'address_home_id',
+        'address_home_id': 'address_home_id',   # many2one; si luego quieres normalizarlo, lo vemos
         'Barrio': 'x_studio_barrio',
-        'Municipio': 'x_studio_municipio'
+        'Municipio': 'x_studio_municipio'      # <- aquí aplicamos el mapeo a nombre
     }
 
     resultados = []
@@ -260,12 +313,23 @@ def empleados_conduccion_list(request):
         emp_data = {}
         for json_key, odoo_field in field_map.items():
             valor = emp.get(odoo_field)
-            # Sólo añadimos la clave si valor no es None, False ni cadena vacía
+
+            if json_key == 'Municipio':
+                mid = _extract_m2o_id(valor)
+                # Devuelve el nombre desde x_bancos; si no existe, omite el campo
+                nombre_mun = id2mun.get(mid)
+                if nombre_mun:
+                    emp_data[json_key] = nombre_mun
+                continue  # ya tratamos Municipio
+
+            # Resto de campos: añade si tiene valor
             if valor not in (None, False, ''):
                 emp_data[json_key] = valor
+
         resultados.append(emp_data)
 
     return JsonResponse({'empleados': resultados})
+
 @swagger_auto_schema(
     method='get',
     manual_parameters=[param_codigo],
@@ -291,62 +355,61 @@ def empleados_conduccion_list(request):
 @authentication_classes([JWTAuthentication])
 @permission_classes([IsAuthenticated])
 def empleado_conduccion_por_codigo(request):
-    # 1) Sólo GET
     if request.method != 'GET':
         return JsonResponse({'error': 'Sólo GET permitido.'}, status=405)
 
-    # 2) Leer el código desde query string
     codigo = request.GET.get('codigo')
     if not codigo:
         return JsonResponse({'error': 'Falta el parámetro "codigo".'}, status=400)
     logger.debug(f"[empleado_conduccion_por_codigo] Filtro recibido – codigo={codigo!r}")
 
-    # 3) Construir dominio: compañía fija + filtro por código
     domain = [
-        ('company_id.name', '=', 'Programa de Conducción de Vehículos de Transporte Masivo'), ('x_studio_estado_empleado', '=', 'Activo'),
+        ('company_id.name', '=', 'Programa de Conducción de Vehículos de Transporte Masivo'),
+        ('x_studio_estado_empleado', '=', 'Activo'),
     ]
-    # Intentamos convertir a entero, si falla lo usamos como string
     try:
         domain.append(('x_studio_codigo', '=', int(codigo)))
     except ValueError:
         domain.append(('x_studio_codigo', '=', codigo))
-    logger.debug(f"[empleado_conduccion_por_codigo] Domain final: {domain!r}")
 
-    # 4) Llamada a Odoo sin límite de 100
     empleados = odoo_search_read(
         model='hr.employee',
         domain=domain,
         fields=[
-            'name',                        # cédula
-            'identification_id',           # nombre
-            'x_studio_codigo',             # código tripulante
-            'x_studio_estado_empleado',    # estado
+            'name',
+            'identification_id',
+            'x_studio_codigo',
+            'x_studio_estado_empleado',
             'job_title',
-            'x_studio_zona_proyecto_metro',# título del puesto
-            'x_studio_formacion_conduccion',# título del puesto
+            'x_studio_zona_proyecto_metro',
+            'x_studio_formacion_conduccion',
             'x_studio_correo_electrnico_personal',
             'address_home_id',
             'x_studio_barrio',
             'x_studio_municipio'
-            
         ],
-        limit=False  # o limit=0 si tu wrapper lo prefiere
+        limit=0
     )
     total = len(empleados)
     logger.debug(f"[empleado_conduccion_por_codigo] Odoo devolvió {total} registros")
 
+    # Resolver municipios en lote
+    municipio_ids = { _extract_m2o_id(emp.get('x_studio_municipio')) for emp in empleados }
+    municipio_ids.discard(None)
+    id2mun = _fetch_x_bancos_names(municipio_ids)
+
     field_map = {
-        'cedula':              'name',
-        'nombre':              'identification_id',
-        'Codigo tripulante':   'x_studio_codigo',
-        'estado':              'x_studio_estado_empleado',
-        'job_title':           'job_title',
-        'zona':                'x_studio_zona_proyecto_metro',
-        'formacion_conduccion':'x_studio_formacion_conduccion',
-        'Correo personal':     'x_studio_correo_electrnico_personal',
-        'address_home_id':     'address_home_id',
-        'Barrio':              'x_studio_barrio',
-        'Municipio':           'x_studio_municipio'
+        'cedula':            'name',
+        'nombre':            'identification_id',
+        'Codigo tripulante': 'x_studio_codigo',
+        'estado':            'x_studio_estado_empleado',
+        'job_title':         'job_title',
+        'zona':              'x_studio_zona_proyecto_metro',
+        'formacion_conduccion': 'x_studio_formacion_conduccion',
+        'Correo personal':   'x_studio_correo_electrnico_personal',
+        'address_home_id':   'address_home_id',
+        'Barrio':            'x_studio_barrio',
+        'Municipio':         'x_studio_municipio'
     }
 
     resultados = []
@@ -354,12 +417,19 @@ def empleado_conduccion_por_codigo(request):
         emp_data = {}
         for json_key, odoo_field in field_map.items():
             valor = emp.get(odoo_field)
-            # Sólo incluimos si tiene valor significativo
+
+            if json_key == 'Municipio':
+                mid = _extract_m2o_id(valor)
+                nombre_mun = id2mun.get(mid)
+                if nombre_mun:
+                    emp_data[json_key] = nombre_mun
+                continue
+
             if valor not in (None, False, ''):
                 emp_data[json_key] = valor
+
         resultados.append(emp_data)
 
-    # 6) Devolver JSON
     return JsonResponse({'empleados': resultados})
 
 
