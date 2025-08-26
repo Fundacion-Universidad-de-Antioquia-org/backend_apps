@@ -227,7 +227,10 @@ def empleados_conduccion_list(request):
             'job_title',
             'x_studio_zona_proyecto_metro',# título del puesto
             'x_studio_formacion_conduccion',
-            'x_studio_correo_electrnico_personal'
+            'x_studio_correo_electrnico_personal',
+            'address_home_id',
+            'x_studio_barrio',
+            'x_studio_municipio'
         ],
         # prueba primero con False; si falla, cámbialo a 0
         limit=False  
@@ -246,7 +249,10 @@ def empleados_conduccion_list(request):
         'job_title': 'job_title',
         'zona': 'x_studio_zona_proyecto_metro',
         'formacion_conduccion': 'x_studio_formacion_conduccion',
-        'Correo personal': 'x_studio_correo_electrnico_personal'
+        'Correo personal': 'x_studio_correo_electrnico_personal',
+        'address_home_id': 'address_home_id',
+        'Barrio': 'x_studio_barrio',
+        'Municipio': 'x_studio_municipio'
     }
 
     resultados = []
@@ -318,7 +324,11 @@ def empleado_conduccion_por_codigo(request):
             'job_title',
             'x_studio_zona_proyecto_metro',# título del puesto
             'x_studio_formacion_conduccion',# título del puesto
-            'x_studio_correo_electrnico_personal'
+            'x_studio_correo_electrnico_personal',
+            'address_home_id',
+            'x_studio_barrio',
+            'x_studio_municipio'
+            
         ],
         limit=False  # o limit=0 si tu wrapper lo prefiere
     )
@@ -333,7 +343,10 @@ def empleado_conduccion_por_codigo(request):
         'job_title':           'job_title',
         'zona':                'x_studio_zona_proyecto_metro',
         'formacion_conduccion':'x_studio_formacion_conduccion',
-        'Correo personal':     'x_studio_correo_electrnico_personal'
+        'Correo personal':     'x_studio_correo_electrnico_personal',
+        'address_home_id':     'address_home_id',
+        'Barrio':              'x_studio_barrio',
+        'Municipio':           'x_studio_municipio'
     }
 
     resultados = []
