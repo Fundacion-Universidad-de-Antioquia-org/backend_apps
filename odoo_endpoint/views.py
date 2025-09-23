@@ -5,7 +5,7 @@ from drf_yasg import openapi
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 import json, logging
-from .utils import odoo_search_read, odoo_update
+from .utils import odoo_search_read, odoo_update, ODOO_URL
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
 # Vista para traer empleados y actualizar datos
@@ -220,6 +220,7 @@ def empleados_conduccion_list(request):
         model='hr.employee',
         domain=domain,
         fields=[
+            'id',
             'name',                        # cédula
             'identification_id',           # nombre
             'x_studio_codigo',             # código tripulante
@@ -263,6 +264,10 @@ def empleados_conduccion_list(request):
             # Sólo añadimos la clave si valor no es None, False ni cadena vacía
             if valor not in (None, False, ''):
                 emp_data[json_key] = valor
+        # Agregar URL de la foto si hay id
+        emp_id = emp.get('id')
+        if emp_id:
+            emp_data['foto_url'] = f"{ODOO_URL}/web/image?model=hr.employee&id={emp_id}&field=image_1920"
         resultados.append(emp_data)
 
     return JsonResponse({'empleados': resultados})
@@ -317,6 +322,7 @@ def empleado_conduccion_por_codigo(request):
         model='hr.employee',
         domain=domain,
         fields=[
+            'id',
             'name',                        # cédula
             'identification_id',           # nombre
             'x_studio_codigo',             # código tripulante
@@ -357,6 +363,10 @@ def empleado_conduccion_por_codigo(request):
             # Sólo incluimos si tiene valor significativo
             if valor not in (None, False, ''):
                 emp_data[json_key] = valor
+        # Agregar URL de la foto si hay id (misma lógica que lista)
+        emp_id = emp.get('id')
+        if emp_id:
+            emp_data['foto_url'] = f"{ODOO_URL}/web/image?model=hr.employee&id={emp_id}&field=image_1920"
         resultados.append(emp_data)
 
     # 6) Devolver JSON
