@@ -254,3 +254,40 @@ def fetch_x_hobbies_options():
     except Exception:
         logger.error("Error al obtener opciones de x_hobbies.x_studio_hobbie", exc_info=True)
         return []
+
+def fetch_x_actividad_economica():
+    """Modelo Actividad Económica: x_actividad_economica.
+    Devuelve id, x_name, x_studio_descripcin y clase_riesgo (primer dígito encontrado).
+    """
+    uid = get_odoo_uid()
+    if uid is None:
+        return []
+    models = xmlrpc.client.ServerProxy(f'{host}/xmlrpc/2/object')
+    try:
+        records = models.execute_kw(
+            database, uid, password,
+            'x_actividad_economica', 'search_read',
+            [[]],
+            {'fields': ['x_name', 'x_studio_descripcin', 'id']}
+        )
+        result = []
+        for rec in records:
+            name_val = rec.get('x_name') or ''
+            descr_val = rec.get('x_studio_descripcin') or ''
+            # Buscar primer dígito en x_name; si no, en descripción
+            source = f"{name_val} {descr_val}"
+            clase_riesgo = None
+            for ch in source:
+                if ch.isdigit():
+                    clase_riesgo = ch
+                    break
+            result.append({
+                'id': rec.get('id'),
+                'x_name': name_val,
+                'x_studio_descripcin': descr_val,
+                'clase_riesgo': clase_riesgo
+            })
+        return result
+    except Exception:
+        logger.error("Error al obtener x_actividad_economica", exc_info=True)
+        return []

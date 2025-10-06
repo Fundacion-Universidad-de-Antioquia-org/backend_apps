@@ -17,7 +17,8 @@ from .utils import (
     fetch_x_paises,
     fetch_x_cesantias,
     fetch_x_poblaciones_vul,
-    fetch_x_hobbies_options
+    fetch_x_hobbies_options,
+    fetch_x_actividad_economica
 
 )
 @swagger_auto_schema(
@@ -39,6 +40,7 @@ from .utils import (
                 'cesantias': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT)),
                 'poblaciones_vul': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT)),
                 'hobbies_options': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT)),
+                'actividad_economica': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT)),
                 # … repite para cada clave …
             }
         )
@@ -75,5 +77,6 @@ def odoo_data_endpoint(request):
         "cesantias":fetch_x_cesantias(),
         "poblaciones_vul": fetch_x_poblaciones_vul(),
         "hobbies_options": fetch_x_hobbies_options(),
+        "actividad_economica": fetch_x_actividad_economica(),
     }
     return JsonResponse(response_data)
