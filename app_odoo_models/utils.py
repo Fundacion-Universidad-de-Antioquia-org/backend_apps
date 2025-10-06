@@ -217,3 +217,40 @@ def fetch_x_talla_pantalon():
     except Exception as e:
         logger.error("Error al obtener x_talla_pantalon", exc_info=True)
         return []
+
+def fetch_x_poblaciones_vul():
+    """Modelo Poblaciones Vulnerables: x_poblaciones_vul"""
+    uid = get_odoo_uid()
+    if uid is None:
+        return []
+    models = xmlrpc.client.ServerProxy(f'{host}/xmlrpc/2/object')
+    try:
+        return models.execute_kw(
+            database, uid, password,
+            'x_poblaciones_vul', 'search_read',
+            [[]],
+            {'fields': ['x_name', 'id']}
+        )
+    except Exception as e:
+        logger.error("Error al obtener x_poblaciones_vul", exc_info=True)
+        return []
+
+def fetch_x_hobbies_options():
+    """Obtiene las opciones del campo selección x_hobbies.x_studio_hobbie como pares value/label"""
+    uid = get_odoo_uid()
+    if uid is None:
+        return []
+    models = xmlrpc.client.ServerProxy(f'{host}/xmlrpc/2/object')
+    try:
+        fields_info = models.execute_kw(
+            database, uid, password,
+            'x_hobbies', 'fields_get',
+            [[], ['selection']]
+        )
+        field = fields_info.get('x_studio_hobbie') or {}
+        selection = field.get('selection') or []
+        # selection viene como lista de tuplas (value, label)
+        return [{"value": v, "label": l} for v, l in selection]
+    except Exception:
+        logger.error("Error al obtener opciones de x_hobbies.x_studio_hobbie", exc_info=True)
+        return []

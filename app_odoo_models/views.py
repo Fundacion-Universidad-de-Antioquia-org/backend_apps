@@ -15,7 +15,9 @@ from .utils import (
     fetch_x_talla_calzado,
     fetch_x_talla_pantalon,
     fetch_x_paises,
-    fetch_x_cesantias
+    fetch_x_cesantias,
+    fetch_x_poblaciones_vul,
+    fetch_x_hobbies_options
 
 )
 @swagger_auto_schema(
@@ -35,6 +37,8 @@ from .utils import (
                 'talla_calzado': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT)),
                 'talla_pantalon': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT)),
                 'cesantias': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT)),
+                'poblaciones_vul': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT)),
+                'hobbies_options': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT)),
                 # … repite para cada clave …
             }
         )
@@ -69,5 +73,7 @@ def odoo_data_endpoint(request):
         "talla_calzado": fetch_x_talla_calzado(),
         "talla_pantalon": fetch_x_talla_pantalon(),
         "cesantias":fetch_x_cesantias(),
+        "poblaciones_vul": fetch_x_poblaciones_vul(),
+        "hobbies_options": fetch_x_hobbies_options(),
     }
     return JsonResponse(response_data)
