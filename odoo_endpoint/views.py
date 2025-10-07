@@ -228,6 +228,7 @@ def empleados_conduccion_list(request):
             'job_title',
             'x_studio_zona_proyecto_metro',# título del puesto
             'x_studio_formacion_conduccion',
+            'x_studio_fecha_de_ingreso_1',
             'x_studio_correo_electrnico_personal',
             'address_home_id',
             'x_studio_barrio',
@@ -250,6 +251,7 @@ def empleados_conduccion_list(request):
         'job_title': 'job_title',
         'zona': 'x_studio_zona_proyecto_metro',
         'formacion_conduccion': 'x_studio_formacion_conduccion',
+        'x_studio_fecha_de_ingreso_1': 'x_studio_fecha_de_ingreso_1',
         'Correo personal': 'x_studio_correo_electrnico_personal',
         'address_home_id': 'address_home_id',
         'Barrio': 'x_studio_barrio',
@@ -330,6 +332,7 @@ def empleado_conduccion_por_codigo(request):
             'job_title',
             'x_studio_zona_proyecto_metro',# título del puesto
             'x_studio_formacion_conduccion',# título del puesto
+            'x_studio_fecha_de_ingreso_1',
             'x_studio_correo_electrnico_personal',
             'address_home_id',
             'x_studio_barrio',
@@ -349,6 +352,7 @@ def empleado_conduccion_por_codigo(request):
         'job_title':           'job_title',
         'zona':                'x_studio_zona_proyecto_metro',
         'formacion_conduccion':'x_studio_formacion_conduccion',
+        'x_studio_fecha_de_ingreso_1': 'x_studio_fecha_de_ingreso_1',
         'Correo personal':     'x_studio_correo_electrnico_personal',
         'address_home_id':     'address_home_id',
         'Barrio':              'x_studio_barrio',
