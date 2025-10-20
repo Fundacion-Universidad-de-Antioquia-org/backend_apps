@@ -24,6 +24,85 @@ from .serializers import (
     PasswordResetConfirmSerializer
 )
 logger = logging.getLogger(__name__)  # __name__ debe coincidir con 'tu_app.views'
+
+def fetch_employee_studies(employee_ids):
+    """
+    Obtiene los estudios de empleados donde x_studio_estado = 'En Proceso'
+    Retorna un diccionario con employee_id como clave y lista de estudios como valor
+    """
+    if not employee_ids:
+        logger.debug("No employee IDs provided for studies fetch")
+        return {}
+    
+    try:
+        logger.debug(f"Fetching studies for employee IDs: {employee_ids[:5]}...")  # Solo primeros 5 para log
+        
+        # Primero probemos obtener algunos estudios para ver la estructura
+        studies = odoo_search_read(
+            model='x_historial',
+            domain=[
+                ('x_studio_estado', '=', 'En Proceso')
+            ],
+            fields=[
+                'x_studio_many2one_field_bEe70',
+                'x_studio_institucin',
+                'x_studio_formacin_acadmica',
+                'x_studio_estado'
+            ],
+            limit=10  # Solo 10 para debug
+        )
+        
+        logger.debug(f"Found {len(studies)} studies total with 'En Proceso' status")
+        if studies:
+            logger.debug(f"Sample study structure: {studies[0]}")
+        
+        # Ahora filtramos por los empleados específicos
+        studies_filtered = odoo_search_read(
+            model='x_historial',
+            domain=[
+                ('x_studio_many2one_field_bEe70', 'in', employee_ids),
+                ('x_studio_estado', '=', 'En Proceso')
+            ],
+            fields=[
+                'x_studio_many2one_field_bEe70',
+                'x_studio_institucin',
+                'x_studio_formacin_acadmica',
+                'x_studio_estado'
+            ],
+            limit=False
+        )
+        
+        logger.debug(f"Found {len(studies_filtered)} studies for the specific employees")
+        
+        # Agrupar por employee_id
+        studies_by_employee = {}
+        for study in studies_filtered:
+            emp_id_field = study.get('x_studio_many2one_field_bEe70')
+            logger.debug(f"Study employee field: {emp_id_field} (type: {type(emp_id_field)})")
+            
+            # El campo many2one puede venir como [id, name] o como id directo
+            if isinstance(emp_id_field, list) and len(emp_id_field) > 0:
+                emp_id = emp_id_field[0]  # Tomar el ID del many2one
+            elif isinstance(emp_id_field, (int, str)):
+                emp_id = emp_id_field
+            else:
+                logger.warning(f"Unexpected employee field format: {emp_id_field}")
+                continue
+            
+            if emp_id not in studies_by_employee:
+                studies_by_employee[emp_id] = []
+            
+            studies_by_employee[emp_id].append({
+                'universidad': study.get('x_studio_institucin'),
+                'carrera': study.get('x_studio_formacin_acadmica'),
+                'estado': study.get('x_studio_estado')
+            })
+        
+        logger.debug(f"Studies grouped by employee: {len(studies_by_employee)} employees with studies")
+        return studies_by_employee
+    except Exception as e:
+        logger.error(f"Error al obtener estudios de empleados: {e}", exc_info=True)
+        return {}
 param_compania = openapi.Parameter(
     'compania', openapi.IN_QUERY,
     description='ID o nombre de la compañía',
@@ -204,8 +283,8 @@ def prestadores_list(request):
 )
 @csrf_exempt
 @api_view(['GET'])
-@authentication_classes([JWTAuthentication])
-@permission_classes([IsAuthenticated])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def empleados_conduccion_list(request):
     if request.method != 'GET':
         return JsonResponse({'error': 'Sólo GET permitido.'}, status=405)
@@ -242,6 +321,14 @@ def empleados_conduccion_list(request):
     total = len(empleados)
     logger.debug(f"[empleados_conduccion_list] Odoo devolvió {total} empleados")
 
+    # 5) Obtener estudios de empleados
+    employee_ids = [emp.get('id') for emp in empleados if emp.get('id')]
+    try:
+        studies_by_employee = fetch_employee_studies(employee_ids)
+    except Exception as e:
+        logger.error(f"Error fetching studies for empleados_conduccion_list: {e}", exc_info=True)
+        studies_by_employee = {}
+
     # Mapeo de nombres de clave JSON a campos de Odoo
     field_map = {
         'cedula': 'name',
@@ -266,8 +353,10 @@ def empleados_conduccion_list(request):
             # Sólo añadimos la clave si valor no es None, False ni cadena vacía
             if valor not in (None, False, ''):
                 emp_data[json_key] = valor
-        # Agregar URL de la foto si hay id
+        # Agregar estudios del empleado
         emp_id = emp.get('id')
+        emp_data['estudios'] = studies_by_employee.get(emp_id, [])
+        # Agregar URL de la foto si hay id
         if emp_id:
             emp_data['foto_url'] = f"{ODOO_URL}/web/image?model=hr.employee&id={emp_id}&field=image_1920"
         resultados.append(emp_data)
@@ -295,8 +384,8 @@ def empleados_conduccion_list(request):
 )
 @csrf_exempt
 @api_view(['GET'])
-@authentication_classes([JWTAuthentication])
-@permission_classes([IsAuthenticated])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def empleado_conduccion_por_codigo(request):
     # 1) Sólo GET
     if request.method != 'GET':
@@ -344,6 +433,14 @@ def empleado_conduccion_por_codigo(request):
     total = len(empleados)
     logger.debug(f"[empleado_conduccion_por_codigo] Odoo devolvió {total} registros")
 
+    # 5) Obtener estudios de empleados
+    employee_ids = [emp.get('id') for emp in empleados if emp.get('id')]
+    try:
+        studies_by_employee = fetch_employee_studies(employee_ids)
+    except Exception as e:
+        logger.error(f"Error fetching studies for empleado_conduccion_por_codigo: {e}", exc_info=True)
+        studies_by_employee = {}
+
     field_map = {
         'cedula':              'name',
         'nombre':              'identification_id',
@@ -367,8 +464,10 @@ def empleado_conduccion_por_codigo(request):
             # Sólo incluimos si tiene valor significativo
             if valor not in (None, False, ''):
                 emp_data[json_key] = valor
-        # Agregar URL de la foto si hay id (misma lógica que lista)
+        # Agregar estudios del empleado
         emp_id = emp.get('id')
+        emp_data['estudios'] = studies_by_employee.get(emp_id, [])
+        # Agregar URL de la foto si hay id (misma lógica que lista)
         if emp_id:
             emp_data['foto_url'] = f"{ODOO_URL}/web/image?model=hr.employee&id={emp_id}&field=image_1920"
         resultados.append(emp_data)
